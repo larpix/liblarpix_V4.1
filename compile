@@ -1,0 +1,7 @@
+rm PIX0MQ_Dict*
+`root-config --cxx --cflags` -fPIC -c PIX0MQ.cxx -lzmq -std=c++11
+rootcint -f PIX0MQ_Dict.cxx -c -p PIX0MQ.hxx PIX0MQ_LinkDef.h
+`root-config --cxx --cflags` -fPIC -c PIX0MQ_Dict.cxx -lzmq -std=c++11
+`root-config --cxx --cflags` -fPIC -shared -o libPIX0MQ.so PIX0MQ.o PIX0MQ_Dict.o -lzmq -std=c++11
+rm *.o
+
