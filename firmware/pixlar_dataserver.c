@@ -52,6 +52,26 @@ if(rv==-1) {rv=zmq_errno(); printf("zmq_msg_send ERRNO=%d\n",rv);}
 //zmq_msg_close (&msg); - according to manual not needed
 }
 
+/*
+ * A basic format for the ZMQ messages.
+ *
+ * "<major_version>.<minor_version>!<IO chain index>!<UART data>"
+ */
+void send_formatted(uint64_t * buf, int nbytes, int channel)
+{
+    int version_major = 1;
+    int version_minor = 0;
+    char prefix[64];
+    size_t prefix_length;
+    prefix_length = sprintf(prefix, "%d.%d!%d!", version_major, version_minor, channel);
+    // standard buffer size for dataserver is 1024, plus 8 for max
+    // length of prefix
+    uint64_t bigbuf[1032];
+    memcpy(bigbuf, prefix, prefix_length);
+    memcpy(bigbuf+prefix_length, buf, nbytes);
+    sendout(bigbuf, nbytes+prefix_length);
+}
+
 void printdate()
 {
     char str[64];
@@ -119,10 +139,10 @@ int recvd=0;
 ct0=time(NULL);
 while(1) //main loop
 {
-    if(bufbusy==0){    recvd=read(fd[0],buf,1024*8);    rec_wA=rec_wA+recvd/8; if(recvd>0) {   bufbusy=1;   sendout(buf,recvd); ct0=time(NULL);}}
-    if(bufbusy==0){    recvd=read(fd[1],buf,1024*8);    rec_wB=rec_wB+recvd/8; if(recvd>0) {   bufbusy=1;   sendout(buf,recvd); ct0=time(NULL);}}
-    if(bufbusy==0){    recvd=read(fd[2],buf,1024*8);    rec_wC=rec_wC+recvd/8; if(recvd>0) {   bufbusy=1;   sendout(buf,recvd); ct0=time(NULL);}}
-    if(bufbusy==0){    recvd=read(fd[3],buf,1024*8);    rec_wD=rec_wD+recvd/8; if(recvd>0) {   bufbusy=1;   sendout(buf,recvd); ct0=time(NULL);}}
+    if(bufbusy==0){    recvd=read(fd[0],buf,1024*8);    rec_wA=rec_wA+recvd/8; if(recvd>0) {   bufbusy=1;   send_formatted(buf,recvd, 0); ct0=time(NULL);}}
+    if(bufbusy==0){    recvd=read(fd[1],buf,1024*8);    rec_wB=rec_wB+recvd/8; if(recvd>0) {   bufbusy=1;   send_formatted(buf,recvd, 1); ct0=time(NULL);}}
+    if(bufbusy==0){    recvd=read(fd[2],buf,1024*8);    rec_wC=rec_wC+recvd/8; if(recvd>0) {   bufbusy=1;   send_formatted(buf,recvd, 2); ct0=time(NULL);}}
+    if(bufbusy==0){    recvd=read(fd[3],buf,1024*8);    rec_wD=rec_wD+recvd/8; if(recvd>0) {   bufbusy=1;   send_formatted(buf,recvd, 3); ct0=time(NULL);}}
      
 //    if(recvd>0) printf("Received words:  A:%lld B:%lld C:%lld D:%lld \n",rec_wA, rec_wB,rec_wC, rec_wD);
 
