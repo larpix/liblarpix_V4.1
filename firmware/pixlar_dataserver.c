@@ -26,7 +26,7 @@ void *context = NULL;
 void *publisher = NULL;
 
 struct timeb mstime0, mstime1;
-time_t ct,ct0;
+time_t ct, ct0, ct_ts;
 
 uint8_t evbuf[EVLEN];
 
@@ -55,15 +55,22 @@ if(rv==-1) {rv=zmq_errno(); printf("zmq_msg_send ERRNO=%d\n",rv);}
 /*
  * A basic format for the ZMQ messages.
  *
- * "<major_version>.<minor_version>!<IO chain index>!<UART data>"
+ * MSGTYPE_LARPIX_DATA:
+ * "<major_version>.<minor_version>!<type>!<IO chain index>!<UART data>"
+ *
+ * MSGTYPE_TIMESTAMP_DATA:
+ * "<major_version>.<minor_version>!<type>!0!<8-byte timestamp>"
+ *
  */
-void send_formatted(uint64_t * buf, int nbytes, int channel)
+static char MSGTYPE_LARPIX_DATA = 'D';
+static char MSGTYPE_TIMESTAMP_DATA = 'T';
+void send_formatted(uint64_t * buf, int nbytes, int channel, char msg_type=MSGTYPE_LARPIX_DATA)
 {
     int version_major = 1;
     int version_minor = 0;
     char prefix[64];
     size_t prefix_length;
-    prefix_length = sprintf(prefix, "%d.%d!%d!", version_major, version_minor, channel);
+    prefix_length = sprintf(prefix, "%d.%d!%c!%d!", version_major, version_minor, msg_type, channel);
     // standard buffer size for dataserver is 1024, plus 8 for max
     // length of prefix
     uint64_t bigbuf[1032];
@@ -76,9 +83,9 @@ void printdate()
 {
     char str[64];
     time_t result=time(NULL);
-    sprintf(str,"%s", asctime(gmtime(&result))); 
+    sprintf(str,"%s", asctime(gmtime(&result)));
     str[strlen(str)-1]=0; //remove CR simbol
-    printf("%s ", str); 
+    printf("%s ", str);
 }
 
 /*
@@ -137,19 +144,24 @@ bufbusy=0;
 
 int recvd=0;
 ct0=time(NULL);
+ct_ts=ct0;
 while(1) //main loop
 {
     if(bufbusy==0){    recvd=read(fd[0],buf,1024*8);    rec_wA=rec_wA+recvd/8; if(recvd>0) {   bufbusy=1;   send_formatted(buf,recvd, 0); ct0=time(NULL);}}
     if(bufbusy==0){    recvd=read(fd[1],buf,1024*8);    rec_wB=rec_wB+recvd/8; if(recvd>0) {   bufbusy=1;   send_formatted(buf,recvd, 1); ct0=time(NULL);}}
     if(bufbusy==0){    recvd=read(fd[2],buf,1024*8);    rec_wC=rec_wC+recvd/8; if(recvd>0) {   bufbusy=1;   send_formatted(buf,recvd, 2); ct0=time(NULL);}}
     if(bufbusy==0){    recvd=read(fd[3],buf,1024*8);    rec_wD=rec_wD+recvd/8; if(recvd>0) {   bufbusy=1;   send_formatted(buf,recvd, 3); ct0=time(NULL);}}
-     
 //    if(recvd>0) printf("Received words:  A:%lld B:%lld C:%lld D:%lld \n",rec_wA, rec_wB,rec_wC, rec_wD);
 
 //Heartbeat generation if no data
 ct=time(NULL);
-if(ct-ct0 > 1 && bufbusy==0) {ct0=ct; sendout(heartbeat,3);}
-
+if(ct-ct0 > 1 && bufbusy == 0) {ct0=ct; sendout(heartbeat,3);}
+    if(ct-ct_ts > 1 && bufbusy==0) {
+        ct_ts = ct;
+        bufbusy = 1;
+        buf[0] = (uint64_t)ct_ts;
+        send_formatted(buf, 8, 0, MSGTYPE_TIMESTAMP_DATA);
+    }
 }
 
 close(fd[0]);
