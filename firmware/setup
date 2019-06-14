@@ -1,0 +1,43 @@
+
+#busybox devmem 0x43c00000 32 49   #2.. MHz
+#busybox devmem 0x43c00000 32 4   #20.0 MHz
+busybox devmem 0x43c00000 32 9   #10.0 MHz
+busybox devmem 0x43c00004 32 1   #Reset
+busybox devmem 0x43c00004 32 0   #Reset
+
+#busybox devmem 0x43c00008 32 100000   #100 Hz at TST output LEMO
+busybox devmem 0x43c00008 32 10000   #1000 Hz at TST output LEMO
+busybox devmem 0xF8000180 32 0x00100500 //set FCLCK1 to 100 MHz
+#busybox devmem 0xF8000180 32 0x00100600 //set FCLCK1 to 100*5/6 MHz
+
+
+insmod /home/ubuntu/DriversWork/uart64n/uart64.ko
+sleep 1
+chmod 666 /dev/uart*
+
+#/home/ubuntu/pixlar_write_disableall 207 207
+#/home/ubuntu/pixlar_write_disableall 250 250
+#/home/ubuntu/pixlar_write_disableall 249 249
+
+
+#/home/ubuntu/silence
+#/home/ubuntu/silence
+
+
+
+
+#sudo busybox devmem 0x43c01020 64 1 
+#sudo busybox devmem 0x43c02020 64 1 
+#sudo busybox devmem 0x43c03020 64 1 
+#sudo busybox devmem 0x43c04020 64 1 
+
+
+
+#ifconfig eth0 130.92.139.27 netmask 255.255.255.0 broadcast 130.92.139.255  gateway 130.92.139.1
+#ifdown eth0; ifup eth0;
+
+/home/ubuntu/pixlar &
+sleep 1
+/home/ubuntu/silence
+sleep 1
+/home/ubuntu/silence
