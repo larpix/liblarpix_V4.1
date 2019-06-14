@@ -29,9 +29,10 @@ struct timeb mstime0, mstime1;
 time_t ct,ct0;
 
 uint8_t evbuf[EVLEN];
+static uint32_t LARPIX_WORD_SIZE = 8; //bytes
+static uint32_t LARPIX_BUFFER_SIZE = 1024*LARPIX_WORD_SIZE; //bytes
 
 volatile int bufbusy=0;
-
 
 void transfer_complete (void *data, void *hint) //call back from ZMQ sent function, hint points to subbufer index
 {
@@ -56,9 +57,9 @@ void printdate()
 {
     char str[64];
     time_t result=time(NULL);
-    sprintf(str,"%s", asctime(gmtime(&result))); 
+    sprintf(str,"%s", asctime(gmtime(&result)));
     str[strlen(str)-1]=0; //remove CR simbol
-    printf("%s ", str); 
+    printf("%s ", str);
 }
 
 /*
@@ -79,11 +80,10 @@ int main (int argc, char **argv)
  //   set_conio_terminal_mode();
 char roll[4]={95,92,124,47};
 int rv;
-uint64_t buf[1024];
+uint64_t buf[LARPIX_BUFFER_SIZE/LARPIX_WORD_SIZE];
 char heartbeat[128];
 sprintf(heartbeat,"HB");
 
-uint64_t w64;
 context = zmq_ctx_new();
 long long unsigned rec_wA=0, rec_wB=0, rec_wC=0, rec_wD=0;
 //  Socket to send data to clients
@@ -109,26 +109,45 @@ printdate(); printf ("pixlar_server: data publisher at tcp://5556\n");
 bufbusy=0;
 
 
-    int fd[4];
-    fd[0] = open("/dev/uart640", O_RDWR); printf("open /dev/uart640 fd=%d\n",fd[0]);
-    fd[1] = open("/dev/uart641", O_RDWR); printf("open /dev/uart641 fd=%d\n",fd[1]);
-    fd[2] = open("/dev/uart642", O_RDWR); printf("open /dev/uart642 fd=%d\n",fd[2]);
-    fd[3] = open("/dev/uart643", O_RDWR); printf("open /dev/uart643 fd=%d\n",fd[3]);
+int fd[4];
+fd[0] = open("/dev/uart640", O_RDWR); printf("open /dev/uart640 fd=%d\n",fd[0]);
+fd[1] = open("/dev/uart641", O_RDWR); printf("open /dev/uart641 fd=%d\n",fd[1]);
+fd[2] = open("/dev/uart642", O_RDWR); printf("open /dev/uart642 fd=%d\n",fd[2]);
+fd[3] = open("/dev/uart643", O_RDWR); printf("open /dev/uart643 fd=%d\n",fd[3]);
 
+int recvd_A=0;
+int recvd_B=0;
+int recvd_C=0;
+int recvd_D=0;
 int recvd=0;
 ct0=time(NULL);
 while(1) //main loop
 {
-    if(bufbusy==0){    recvd=read(fd[0],buf,1024*8);    rec_wA=rec_wA+recvd/8; if(recvd>0) {   bufbusy=1;   sendout(buf,recvd); ct0=time(NULL);}}
-    if(bufbusy==0){    recvd=read(fd[1],buf,1024*8);    rec_wB=rec_wB+recvd/8; if(recvd>0) {   bufbusy=1;   sendout(buf,recvd); ct0=time(NULL);}}
-    if(bufbusy==0){    recvd=read(fd[2],buf,1024*8);    rec_wC=rec_wC+recvd/8; if(recvd>0) {   bufbusy=1;   sendout(buf,recvd); ct0=time(NULL);}}
-    if(bufbusy==0){    recvd=read(fd[3],buf,1024*8);    rec_wD=rec_wD+recvd/8; if(recvd>0) {   bufbusy=1;   sendout(buf,recvd); ct0=time(NULL);}}
-     
-//    if(recvd>0) printf("Received words:  A:%lld B:%lld C:%lld D:%lld \n",rec_wA, rec_wB,rec_wC, rec_wD);
+    if(bufbusy==0){
+        recvd_A=read(fd[0],buf+recvd,LARPIX_BUFFER_SIZE-recvd); recvd+=recvd_A;
+        recvd_B=read(fd[1],buf+recvd,LARPIX_BUFFER_SIZE-recvd); recvd+=recvd_B;
+        recvd_C=read(fd[2],buf+recvd,LARPIX_BUFFER_SIZE-recvd); recvd+=recvd_C;
+        recvd_D=read(fd[3],buf+recvd,LARPIX_BUFFER_SIZE-recvd); recvd+=recvd_D;
 
-//Heartbeat generation if no data
-ct=time(NULL);
-if(ct-ct0 > 1 && bufbusy==0) {ct0=ct; sendout(heartbeat,3);}
+        rec_wA+=recvd_A/LARPIX_WORD_SIZE;
+        rec_wB+=recvd_B/LARPIX_WORD_SIZE;
+        rec_wC+=recvd_C/LARPIX_WORD_SIZE;
+        rec_wD+=recvd_D/LARPIX_WORD_SIZE;
+        if(recvd>0) {
+            bufbusy=1;
+            sendout(buf,recvd);
+            ct0=time(NULL);
+        }
+    }
+
+    if(recvd>0) printf("Received words:%d  A:%lld B:%lld C:%lld D:%lld \n", recvd/LARPIX_WORD_SIZE, rec_wA, rec_wB,rec_wC, rec_wD);
+    recvd = 0;
+
+    // Heartbeat generation if no data
+    ct=time(NULL);
+    if(ct-ct0 > 1 && bufbusy==0) {
+        ct0=ct; sendout(heartbeat,3);
+    }
 
 }
 
