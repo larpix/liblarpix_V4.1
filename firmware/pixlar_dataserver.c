@@ -26,9 +26,9 @@ void *context = NULL;
 void *publisher = NULL;
 
 struct timeb mstime0, mstime1;
-time_t ct,ct0;
+time_t ct, ct0, ct_ts;
 
-uint8_t evbuf[EVLEN];
+//uint8_t evbuf[EVLEN];
 
 volatile int bufbusy=0;
 
@@ -53,32 +53,51 @@ if(rv==-1) {rv=zmq_errno(); printf("zmq_msg_send ERRNO=%d\n",rv);}
 }
 
 /*
- * A basic format for the ZMQ messages.
+ * A basic format for the ZMQ messages (reserves first word of message).
  *
- * "<major_version>.<minor_version>!<IO chain index>!<UART data>"
+ * All messages:
+ * byte[0] = major version
+ * byte[1] = minor version
+ * byte[2] = message type
+ *
+ * MSGTYPE_LARPIX_DATA:
+ * byte[2] = 'D'
+ * byte[3] = io channel
+ * byte[4:7] = *unused*
+ *
+ * MSGTYPE_TIMESTAMP_DATA:
+ * byte[2] = 'T'
+ * byte[3:7] = *unused*
+ *
  */
-void send_formatted(uint64_t * buf, int nbytes, int channel)
+static char MSGTYPE_LARPIX_DATA = 'D';
+static char MSGTYPE_TIMESTAMP_DATA = 'T';
+void send_formatted(uint64_t * buf, int nbytes, uint8_t channel, uint8_t msg_type)
 {
-    int version_major = 1;
-    int version_minor = 0;
-    char prefix[64];
-    size_t prefix_length;
-    prefix_length = sprintf(prefix, "%d.%d!%d!", version_major, version_minor, channel);
-    // standard buffer size for dataserver is 1024, plus 8 for max
-    // length of prefix
-    uint64_t bigbuf[1032];
-    memcpy(bigbuf, prefix, prefix_length);
-    memcpy(bigbuf+prefix_length, buf, nbytes);
-    sendout(bigbuf, nbytes+prefix_length);
+    uint8_t version_major = 1;
+    uint8_t version_minor = 0;
+    uint8_t prefix[8];
+    prefix[0] = version_major;
+    prefix[1] = version_minor;
+    prefix[2] = msg_type;
+    if (msg_type == MSGTYPE_LARPIX_DATA) {
+        prefix[3] = channel;
+    } else if (msg_type == MSGTYPE_TIMESTAMP_DATA) {
+        ;
+    }
+    buf[0] = 0;
+    for(int i = 0; i < 8; i++)
+        buf[0] = (uint64_t)prefix[i] << 8*i | buf[0];
+    sendout(buf, nbytes+8);
 }
 
 void printdate()
 {
     char str[64];
     time_t result=time(NULL);
-    sprintf(str,"%s", asctime(gmtime(&result))); 
+    sprintf(str,"%s", asctime(gmtime(&result)));
     str[strlen(str)-1]=0; //remove CR simbol
-    printf("%s ", str); 
+    printf("%s ", str);
 }
 
 /*
@@ -99,7 +118,7 @@ int main (int argc, char **argv)
  //   set_conio_terminal_mode();
 char roll[4]={95,92,124,47};
 int rv;
-uint64_t buf[1024];
+uint64_t buf[1024+1];
 char heartbeat[128];
 sprintf(heartbeat,"HB");
 
@@ -137,19 +156,24 @@ bufbusy=0;
 
 int recvd=0;
 ct0=time(NULL);
+ct_ts=ct0;
 while(1) //main loop
 {
-    if(bufbusy==0){    recvd=read(fd[0],buf,1024*8);    rec_wA=rec_wA+recvd/8; if(recvd>0) {   bufbusy=1;   send_formatted(buf,recvd, 0); ct0=time(NULL);}}
-    if(bufbusy==0){    recvd=read(fd[1],buf,1024*8);    rec_wB=rec_wB+recvd/8; if(recvd>0) {   bufbusy=1;   send_formatted(buf,recvd, 1); ct0=time(NULL);}}
-    if(bufbusy==0){    recvd=read(fd[2],buf,1024*8);    rec_wC=rec_wC+recvd/8; if(recvd>0) {   bufbusy=1;   send_formatted(buf,recvd, 2); ct0=time(NULL);}}
-    if(bufbusy==0){    recvd=read(fd[3],buf,1024*8);    rec_wD=rec_wD+recvd/8; if(recvd>0) {   bufbusy=1;   send_formatted(buf,recvd, 3); ct0=time(NULL);}}
-     
+    if(bufbusy==0){    recvd=read(fd[0],buf+1,1024*8);    rec_wA=rec_wA+recvd/8; if(recvd>0) {   bufbusy=1;   send_formatted(buf,recvd, 0, MSGTYPE_LARPIX_DATA); ct0=time(NULL);}}
+    if(bufbusy==0){    recvd=read(fd[1],buf+1,1024*8);    rec_wB=rec_wB+recvd/8; if(recvd>0) {   bufbusy=1;   send_formatted(buf,recvd, 1, MSGTYPE_LARPIX_DATA); ct0=time(NULL);}}
+    if(bufbusy==0){    recvd=read(fd[2],buf+1,1024*8);    rec_wC=rec_wC+recvd/8; if(recvd>0) {   bufbusy=1;   send_formatted(buf,recvd, 2, MSGTYPE_LARPIX_DATA); ct0=time(NULL);}}
+    if(bufbusy==0){    recvd=read(fd[3],buf+1,1024*8);    rec_wD=rec_wD+recvd/8; if(recvd>0) {   bufbusy=1;   send_formatted(buf,recvd, 3, MSGTYPE_LARPIX_DATA); ct0=time(NULL);}}
 //    if(recvd>0) printf("Received words:  A:%lld B:%lld C:%lld D:%lld \n",rec_wA, rec_wB,rec_wC, rec_wD);
 
 //Heartbeat generation if no data
 ct=time(NULL);
-if(ct-ct0 > 1 && bufbusy==0) {ct0=ct; sendout(heartbeat,3);}
-
+if(ct-ct0 > 1 && bufbusy == 0) {ct0=ct; sendout(heartbeat,3);}
+    if(ct-ct_ts > 1 && bufbusy==0) {
+        ct_ts = ct;
+        bufbusy = 1;
+        buf[1] = (uint64_t)ct_ts;
+        send_formatted(buf, 8, 0, MSGTYPE_TIMESTAMP_DATA);
+    }
 }
 
 close(fd[0]);
