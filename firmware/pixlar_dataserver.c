@@ -37,15 +37,15 @@ volatile bool bufbusy[6]={0,0,0,0,0,0}; //A,B,C,D,timestamp,heartbeat
 void transfer_complete (void *data, void *hint) //call back from ZMQ sent function, hint points to subbufer index
 {
 bufbusy[*(uint8_t*)hint]=0;
-// printf("buf transmission complete.\n");
+// printf("buf transmission complete on %i.\n", *(uint8_t*)hint);
 }
 
 
-void sendout(void * evbuf, int bytes, uint8_t channel)
+void sendout(void * evbuf, int bytes, uint8_t *channel)
 {
 int rv;
 zmq_msg_t msg;
-zmq_msg_init_data (&msg, evbuf, bytes , transfer_complete, &channel);
+zmq_msg_init_data (&msg, evbuf, bytes , transfer_complete, channel);
 //printf("sendout() buf for sending..\n");
 rv=zmq_msg_send (&msg, publisher, ZMQ_DONTWAIT);
 if(rv==-1) {rv=zmq_errno(); printf("zmq_msg_send ERRNO=%d\n",rv);}
@@ -70,11 +70,18 @@ if(rv==-1) {rv=zmq_errno(); printf("zmq_msg_send ERRNO=%d\n",rv);}
  * byte[2] = 'T'
  * byte[3:7] = *unused*
  *
+ * MSGTYPE_HB_DATA:
+ * byte[2] = 'H'
+ * byte[3] = 'H'
+ * byte[4] = 'B'
+ * byte[5] = '\x00'
+ * byte[6:7] = *unused*
+ *
  */
 static char MSGTYPE_LARPIX_DATA = 'D';
 static char MSGTYPE_TIMESTAMP_DATA = 'T';
 static char MSGTYPE_HB_DATA = 'H';
-void send_formatted(uint64_t * buf, int nbytes, uint8_t channel, uint8_t msg_type)
+void send_formatted(uint64_t * buf, int nbytes, uint8_t *channel, uint8_t msg_type)
 {
     uint8_t version_major = 1;
     uint8_t version_minor = 0;
@@ -83,7 +90,7 @@ void send_formatted(uint64_t * buf, int nbytes, uint8_t channel, uint8_t msg_typ
     prefix[1] = version_minor;
     prefix[2] = msg_type;
     if (msg_type == MSGTYPE_LARPIX_DATA) {
-        prefix[3] = channel;
+        prefix[3] = *channel;
     } else if (msg_type == MSGTYPE_TIMESTAMP_DATA) {
         ;
     } else if (msg_type == MSGTYPE_HB_DATA) {
@@ -131,6 +138,13 @@ uint64_t buf_C[LARPIX_BUFFER_SIZE/LARPIX_WORD_SIZE+1];
 uint64_t buf_D[LARPIX_BUFFER_SIZE/LARPIX_WORD_SIZE+1];
 uint64_t buf_heartbeat[1];
 uint64_t buf_timestamp[2];
+
+uint8_t channel0 = 0;
+uint8_t channel1 = 1;
+uint8_t channel2 = 2;
+uint8_t channel3 = 3;
+uint8_t channel_hb = 5;
+uint8_t channel_ts = 4;
 
 context = zmq_ctx_new();
 long long unsigned rec_wA=0, rec_wB=0, rec_wC=0, rec_wD=0;
@@ -186,22 +200,21 @@ while(1) //main loop
         rec_wD+=recvd_D/LARPIX_WORD_SIZE;
         if(recvd_A>0) {
             bufbusy[0]=1;
-            send_formatted(buf_A, recvd_A, 0, MSGTYPE_LARPIX_DATA);
-            ct0=time(NULL);
+            send_formatted(buf_A, recvd_A, &channel0, MSGTYPE_LARPIX_DATA);
         }
         if(recvd_B>0) {
             bufbusy[1]=1;
-            send_formatted(buf_B, recvd_B, 1, MSGTYPE_LARPIX_DATA);
-            ct0=time(NULL);
+            send_formatted(buf_B, recvd_B, &channel1, MSGTYPE_LARPIX_DATA);
         }
         if(recvd_C>0) {
             bufbusy[2]=1;
-            send_formatted(buf_C, recvd_C, 2, MSGTYPE_LARPIX_DATA);
-            ct0=time(NULL);
+            send_formatted(buf_C, recvd_C, &channel2, MSGTYPE_LARPIX_DATA);
         }
         if(recvd_D>0) {
             bufbusy[3]=1;
-            send_formatted(buf_D, recvd_D, 3, MSGTYPE_LARPIX_DATA);
+            send_formatted(buf_D, recvd_D, &channel3, MSGTYPE_LARPIX_DATA);
+        }
+        if(recvd>0) {
             ct0=time(NULL);
         }
     }
@@ -214,14 +227,15 @@ while(1) //main loop
     if(ct-ct0 > 1 && bufbusy[5]==0) {
       bufbusy[5] = 1;
       ct0=ct;
-      send_formatted(buf_heartbeat, 0, 5, MSGTYPE_HB_DATA);
+      send_formatted(buf_heartbeat, 0, &channel_hb, MSGTYPE_HB_DATA);
     }
     // Timestamp at ~1Hz
-    if(ct-ct_ts >= 1 && bufbusy[4]==0) {
-      ct_ts = ct;
+    if(ct-ct_ts > 0 && bufbusy[4]==0) {
+      ct_ts = time(NULL);
+      ct0=ct;
       bufbusy[4] = 1;
       buf_timestamp[1] = (uint64_t)ct_ts;
-      send_formatted(buf_timestamp, 8, 4, MSGTYPE_TIMESTAMP_DATA);
+      send_formatted(buf_timestamp, 8, &channel_ts, MSGTYPE_TIMESTAMP_DATA);
     }
 }
 
