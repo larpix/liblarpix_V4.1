@@ -30,7 +30,7 @@ time_t ct, ct0, ct_ts;
 
 //uint8_t evbuf[EVLEN];
 #define LARPIX_WORD_SIZE 8 //bytes
-#define uint32_t LARPIX_BUFFER_SIZE (1024*LARPIX_WORD_SIZE) //bytes
+#define LARPIX_BUFFER_SIZE (1024*LARPIX_WORD_SIZE) //bytes
 
 volatile bool bufbusy[6]={0,0,0,0,0,0}; //A,B,C,D,timestamp,heartbeat
 
@@ -73,6 +73,7 @@ if(rv==-1) {rv=zmq_errno(); printf("zmq_msg_send ERRNO=%d\n",rv);}
  */
 static char MSGTYPE_LARPIX_DATA = 'D';
 static char MSGTYPE_TIMESTAMP_DATA = 'T';
+static char MSGTYPE_HB_DATA = 'H';
 void send_formatted(uint64_t * buf, int nbytes, uint8_t channel, uint8_t msg_type)
 {
     uint8_t version_major = 1;
@@ -85,6 +86,10 @@ void send_formatted(uint64_t * buf, int nbytes, uint8_t channel, uint8_t msg_typ
         prefix[3] = channel;
     } else if (msg_type == MSGTYPE_TIMESTAMP_DATA) {
         ;
+    } else if (msg_type == MSGTYPE_HB_DATA) {
+        prefix[3] = 'H';
+        prefix[4] = 'B';
+        prefix[5] = '\x00';
     }
     buf[0] = 0;
     for(int i = 0; i < 8; i++)
@@ -124,9 +129,8 @@ uint64_t buf_A[LARPIX_BUFFER_SIZE/LARPIX_WORD_SIZE+1];
 uint64_t buf_B[LARPIX_BUFFER_SIZE/LARPIX_WORD_SIZE+1];
 uint64_t buf_C[LARPIX_BUFFER_SIZE/LARPIX_WORD_SIZE+1];
 uint64_t buf_D[LARPIX_BUFFER_SIZE/LARPIX_WORD_SIZE+1];
-char buf_heartbeat[128];
+uint64_t buf_heartbeat[1];
 uint64_t buf_timestamp[2];
-sprintf(buf_heartbeat,"HB");
 
 context = zmq_ctx_new();
 long long unsigned rec_wA=0, rec_wB=0, rec_wC=0, rec_wD=0;
@@ -150,7 +154,8 @@ zmq_setsockopt (publisher, ZMQ_SNDTIMEO, &timeout, sizeof timeout);
 rv = zmq_bind (publisher, "tcp://*:5556");
 if(rv<0) {printdate(); printf("Can't bind tcp socket for data! ERRNO=%d. Exiting.\n",errno); return 0;}
 printdate(); printf ("pixlar_server: data publisher at tcp://5556\n");
-bufbusy=0;
+for ( int i = 0; i < 6; i++)
+    bufbusy[i]=0;
 
 
 int fd[4];
@@ -206,13 +211,13 @@ while(1) //main loop
 
     // Heartbeat generation if no data
     ct=time(NULL);
-    if(ct-ct0 > 1 && bufbusy==0) {
+    if(ct-ct0 > 1 && bufbusy[5]==0) {
       bufbusy[5] = 1;
       ct0=ct;
-      sendout(buf_heartbeat, 3, 5);
+      send_formatted(buf_heartbeat, 0, 5, MSGTYPE_HB_DATA);
     }
     // Timestamp at ~1Hz
-    if(ct-ct_ts > 1 && bufbusy==0) {
+    if(ct-ct_ts >= 1 && bufbusy[4]==0) {
       ct_ts = ct;
       bufbusy[4] = 1;
       buf_timestamp[1] = (uint64_t)ct_ts;
