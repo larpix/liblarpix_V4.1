@@ -1,0 +1,4 @@
+KERNEL=="uart640", SYMLINK+="uart64a", MODE="0666"
+KERNEL=="uart641", SYMLINK+="uart64b", MODE="0666"
+KERNEL=="uart642", SYMLINK+="uart64c", MODE="0666"
+KERNEL=="uart643", SYMLINK+="uart64d", MODE="0666"

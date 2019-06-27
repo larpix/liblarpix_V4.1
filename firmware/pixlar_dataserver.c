@@ -32,7 +32,7 @@ time_t ct, ct0, ct_ts;
 #define LARPIX_WORD_SIZE 8 //bytes
 #define LARPIX_BUFFER_SIZE (1024*LARPIX_WORD_SIZE) //bytes
 
-volatile bool bufbusy[6]={0,0,0,0,0,0}; //A,B,C,D,timestamp,heartbeat
+volatile bool bufbusy[7]={0,0,0,0,0,0,0}; //unused,A,B,C,D,timestamp,heartbeat
 
 void transfer_complete (void *data, void *hint) //call back from ZMQ sent function, hint points to subbufer index
 {
@@ -139,12 +139,12 @@ uint64_t buf_D[LARPIX_BUFFER_SIZE/LARPIX_WORD_SIZE+1];
 uint64_t buf_heartbeat[1];
 uint64_t buf_timestamp[2];
 
-uint8_t channel0 = 0;
-uint8_t channel1 = 1;
-uint8_t channel2 = 2;
-uint8_t channel3 = 3;
-uint8_t channel_hb = 5;
-uint8_t channel_ts = 4;
+uint8_t channelA = 1;
+uint8_t channelB = 2;
+uint8_t channelC = 3;
+uint8_t channelD = 4;
+uint8_t channel_hb = 6;
+uint8_t channel_ts = 5;
 
 context = zmq_ctx_new();
 long long unsigned rec_wA=0, rec_wB=0, rec_wC=0, rec_wD=0;
@@ -173,10 +173,10 @@ for ( int i = 0; i < 6; i++)
 
 
 int fd[4];
-fd[0] = open("/dev/uart640", O_RDWR); printf("open /dev/uart640 fd=%d\n",fd[0]);
-fd[1] = open("/dev/uart641", O_RDWR); printf("open /dev/uart641 fd=%d\n",fd[1]);
-fd[2] = open("/dev/uart642", O_RDWR); printf("open /dev/uart642 fd=%d\n",fd[2]);
-fd[3] = open("/dev/uart643", O_RDWR); printf("open /dev/uart643 fd=%d\n",fd[3]);
+fd[0] = open("/dev/uart64a", O_RDWR); printf("open /dev/uart64a fd=%d\n",fd[0]);
+fd[1] = open("/dev/uart64b", O_RDWR); printf("open /dev/uart64b fd=%d\n",fd[1]);
+fd[2] = open("/dev/uart64c", O_RDWR); printf("open /dev/uart64c fd=%d\n",fd[2]);
+fd[3] = open("/dev/uart64d", O_RDWR); printf("open /dev/uart64d fd=%d\n",fd[3]);
 
 int recvd_A=0;
 int recvd_B=0;
@@ -200,19 +200,19 @@ while(1) //main loop
         rec_wD+=recvd_D/LARPIX_WORD_SIZE;
         if(recvd_A>0) {
             bufbusy[0]=1;
-            send_formatted(buf_A, recvd_A, &channel0, MSGTYPE_LARPIX_DATA);
+            send_formatted(buf_A, recvd_A, &channelA, MSGTYPE_LARPIX_DATA);
         }
         if(recvd_B>0) {
             bufbusy[1]=1;
-            send_formatted(buf_B, recvd_B, &channel1, MSGTYPE_LARPIX_DATA);
+            send_formatted(buf_B, recvd_B, &channelB, MSGTYPE_LARPIX_DATA);
         }
         if(recvd_C>0) {
             bufbusy[2]=1;
-            send_formatted(buf_C, recvd_C, &channel2, MSGTYPE_LARPIX_DATA);
+            send_formatted(buf_C, recvd_C, &channelC, MSGTYPE_LARPIX_DATA);
         }
         if(recvd_D>0) {
             bufbusy[3]=1;
-            send_formatted(buf_D, recvd_D, &channel3, MSGTYPE_LARPIX_DATA);
+            send_formatted(buf_D, recvd_D, &channelD, MSGTYPE_LARPIX_DATA);
         }
         if(recvd>0) {
             ct0=time(NULL);
