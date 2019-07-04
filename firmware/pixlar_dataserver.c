@@ -37,7 +37,7 @@ volatile bool bufbusy[7]={0,0,0,0,0,0,0}; //unused,A,B,C,D,timestamp,heartbeat
 void transfer_complete (void *data, void *hint) //call back from ZMQ sent function, hint points to subbufer index
 {
 bufbusy[*(uint8_t*)hint]=0;
-// printf("buf transmission complete on %i.\n", *(uint8_t*)hint);
+ // printf("buf transmission complete on %i.\n", *(uint8_t*)hint);
 }
 
 
@@ -46,10 +46,10 @@ void sendout(void * evbuf, int bytes, uint8_t *channel)
 int rv;
 zmq_msg_t msg;
 zmq_msg_init_data (&msg, evbuf, bytes , transfer_complete, channel);
-//printf("sendout() buf for sending..\n");
+// printf("sendout() buf for sending..\n");
 rv=zmq_msg_send (&msg, publisher, ZMQ_DONTWAIT);
 if(rv==-1) {rv=zmq_errno(); printf("zmq_msg_send ERRNO=%d\n",rv);}
-//printf("zmq_msg_send returns %d\n",rv);
+// printf("zmq_msg_send returns %d\n",rv);
 //zmq_msg_close (&msg); - according to manual not needed
 }
 
@@ -168,7 +168,7 @@ zmq_setsockopt (publisher, ZMQ_SNDTIMEO, &timeout, sizeof timeout);
 rv = zmq_bind (publisher, "tcp://*:5556");
 if(rv<0) {printdate(); printf("Can't bind tcp socket for data! ERRNO=%d. Exiting.\n",errno); return 0;}
 printdate(); printf ("pixlar_server: data publisher at tcp://5556\n");
-for ( int i = 0; i < 6; i++)
+for ( int i = 0; i < 7; i++)
     bufbusy[i]=0;
 
 
@@ -187,7 +187,7 @@ ct0=time(NULL);
 ct_ts=ct0;
 while(1) //main loop
 {
-    if(!(bufbusy[0] || bufbusy[1] || bufbusy[2] || bufbusy[3])){
+    if(!(bufbusy[channelA] || bufbusy[channelB] || bufbusy[channelC] || bufbusy[channelD])){
       // Read from uart into 1:N words of buffer, word 0 is reserved for the message header
         recvd_A=read(fd[0],buf_A+1,LARPIX_BUFFER_SIZE); recvd+=recvd_A;
         recvd_B=read(fd[1],buf_B+1,LARPIX_BUFFER_SIZE); recvd+=recvd_B;
@@ -199,19 +199,19 @@ while(1) //main loop
         rec_wC+=recvd_C/LARPIX_WORD_SIZE;
         rec_wD+=recvd_D/LARPIX_WORD_SIZE;
         if(recvd_A>0) {
-            bufbusy[0]=1;
+            bufbusy[channelA]=1;
             send_formatted(buf_A, recvd_A, &channelA, MSGTYPE_LARPIX_DATA);
         }
         if(recvd_B>0) {
-            bufbusy[1]=1;
+            bufbusy[channelB]=1;
             send_formatted(buf_B, recvd_B, &channelB, MSGTYPE_LARPIX_DATA);
         }
         if(recvd_C>0) {
-            bufbusy[2]=1;
+            bufbusy[channelC]=1;
             send_formatted(buf_C, recvd_C, &channelC, MSGTYPE_LARPIX_DATA);
         }
         if(recvd_D>0) {
-            bufbusy[3]=1;
+            bufbusy[channelD]=1;
             send_formatted(buf_D, recvd_D, &channelD, MSGTYPE_LARPIX_DATA);
         }
         if(recvd>0) {
@@ -224,16 +224,16 @@ while(1) //main loop
 
     // Heartbeat generation if no data
     ct=time(NULL);
-    if(ct-ct0 > 1 && bufbusy[5]==0) {
-      bufbusy[5] = 1;
+    if(ct-ct0 > 1 && bufbusy[channel_hb]==0) {
+      bufbusy[channel_hb] = 1;
       ct0=ct;
       send_formatted(buf_heartbeat, 0, &channel_hb, MSGTYPE_HB_DATA);
     }
     // Timestamp at ~1Hz
-    if(ct-ct_ts > 0 && bufbusy[4]==0) {
+    if(ct-ct_ts > 0 && bufbusy[channel_ts]==0) {
       ct_ts = time(NULL);
       ct0=ct;
-      bufbusy[4] = 1;
+      bufbusy[channel_ts] = 1;
       buf_timestamp[1] = (uint64_t)ct_ts;
       send_formatted(buf_timestamp, 8, &channel_ts, MSGTYPE_TIMESTAMP_DATA);
     }
