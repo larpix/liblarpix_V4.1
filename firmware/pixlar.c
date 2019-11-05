@@ -116,7 +116,7 @@ static const char channel_map[5] = {' ', 'a', 'b', 'c', 'd'};
 int uart54_send(int chan, uint64_t *buf, int num)// send 54-bits word to channel chan (1->A, 2->B)
 {
     //int rc;
-    if(chan>3 || chan<0) return -1;
+    if(chan>4 || chan<0) return -1;
     char str[128];
     sprintf(str,"/dev/uart64%c",channel_map[chan]);
     int fd = open(str, O_RDWR); if(fd<=0) {printf("Can't open %s. Returning -1.",str); return -1;}
@@ -130,7 +130,7 @@ int uart54_send(int chan, uint64_t *buf, int num)// send 54-bits word to channel
 int uart54_recv(int chan, uint64_t *buf, int num) // blocks until receive requested num words
 {
 
-    if(chan>3 || chan<0) return -1;
+    if(chan>4 || chan<0) return -1;
     char str[128];
     sprintf(str,"/dev/uart64%c",channel_map[chan]);
     int fd = open(str, O_RDWR); if(fd<=0) return -1;
